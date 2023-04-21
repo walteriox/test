@@ -1,1164 +1,1503 @@
-data "aws_iam_policy" "iam_ebs" {
-  name = var.ebs_policy_name
-  depends_on  = [module.iam_policy]
-  }
-
-module "iam_assumable_role_with_oidc_ebs"  {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  create_role = true
-  role_name = var.ebs_role_name
-  tags = {
-    Role = var.ebs_role_name
-  }
-
-  provider_url = data.aws_eks_cluster.eks_cluster.identity[0].oidc[0].issuer
-  role_policy_arns = [ data.aws_iam_policy.iam_ebs.arn,
-  ]
-  number_of_role_policy_arns = 1
-  depends_on              = [module.iam_policy, data.aws_iam_policy.iam_ebs, data.aws_eks_cluster.eks_cluster]
-}
-
-
-
-module "iam_policy_ebs"  {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-policy"
-  name        = var.ebs_policy_name
-  path        = "/"
-  description = "EBS CSI driver Policy for EKS Cluster"
-  depends_on              = [module.eks]
-  policy = <<EOF
 {
-    "Version": "2012-10-17",
-    "Statement": [
+  "name": "Kubernetes Dashboard",
+  "description": "Get a high level overview of your Kubernetes instances",
+  "permissions": "PUBLIC_READ_WRITE",
+  "pages": [
+    {
+      "name": "Kubernetes",
+      "description": null,
+      "widgets": [
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:CreateSnapshot",
-                "ec2:AttachVolume",
-                "ec2:DetachVolume",
-                "ec2:ModifyVolume",
-                "ec2:DescribeAvailabilityZones",
-                "ec2:DescribeInstances",
-                "ec2:DescribeSnapshots",
-                "ec2:DescribeTags",
-                "ec2:DescribeVolumes",
-                "ec2:DescribeVolumesModifications"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:CreateTags"
-            ],
-            "Resource": [
-                "arn:aws:ec2:*:*:volume/*",
-                "arn:aws:ec2:*:*:snapshot/*"
-            ],
-            "Condition": {
-                "StringEquals": {
-                    "ec2:CreateAction": [
-                        "CreateVolume",
-                        "CreateSnapshot"
-                    ]
-                }
-            }
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteTags"
-            ],
-            "Resource": [
-                "arn:aws:ec2:*:*:volume/*",
-                "arn:aws:ec2:*:*:snapshot/*"
+          "title": "Resources Used",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT (average(k8s.node.cpuUsedCores) * uniqueCount(entity.name)) as 'Cores', (average(k8s.node.memoryWorkingSetBytes) * uniqueCount(entity.name)) / 1000000000 as 'Mem GB' FROM Metric  WHERE metricName IN ('k8s.node.cpuUsedCores', 'k8s.node.memoryWorkingSetBytes') UNTIL 1 minute ago"
+              }
             ]
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:CreateVolume"
+          "title": "# of K8s Objects",
+          "layout": {
+            "column": 5,
+            "row": 1,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT filter(uniqueCount(k8s.nodeName), WHERE `label.eks.amazonaws.com/compute-type` IS NULL AND k8s.podName IS NULL) AS 'Nodes', filter(uniqueCount(k8s.nodeName), WHERE `label.eks.amazonaws.com/compute-type` IS NOT NULL AND k8s.podName IS NULL) as 'Serverless Nodes', uniqueCount(k8s.clusterName) as 'Clusters', filter(uniqueCount(k8s.namespaceName, k8s.clusterName), WHERE `metricName` = 'k8s.namespace.createdAt') as 'Namespaces', filter(uniqueCount(k8s.deploymentName, k8s.clusterName), WHERE `metricName` = 'k8s.deployment.createdAt') as 'Deployments', filter(uniqueCount(k8s.podName, k8s.nodeName, k8s.deploymentName, k8s.clusterName), WHERE metricName='k8s.pod.isScheduled' or metricName='k8s.pod.startTime') as 'Pods', uniqueCount(k8s.containerId) as 'Containers' FROM Metric UNTIL 1 minute ago"
+              }
             ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "aws:RequestTag/ebs.csi.aws.com/cluster": "true"
-                }
-            }
+            "thresholds": []
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:CreateVolume"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "aws:RequestTag/CSIVolumeName": "*"
-                }
-            }
+          "title": "",
+          "layout": {
+            "column": 9,
+            "row": 1,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "# Kubernetes \n\nThis dashboard provides an overview of your Kubernetes platform health. Apply filters to focus on a specific cluster or namespace.\n\n\n"
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:CreateVolume"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "aws:RequestTag/kubernetes.io/cluster/*": "owned"
-                }
-            }
+          "title": "Namespaces per Cluster",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT uniqueCount(k8s.namespaceName) FACET k8s.clusterName UNTIL 1 minute ago limit 100"
+              }
+            ]
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteVolume"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
-                }
-            }
+          "title": "Pods by Namespace",
+          "layout": {
+            "column": 5,
+            "row": 4,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT uniqueCount(k8s.podName) as 'pod' FACET k8s.namespaceName UNTIL 1 minute ago limit 100"
+              }
+            ]
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteVolume"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "ec2:ResourceTag/CSIVolumeName": "*"
-                }
-            }
+          "title": "Container Restarts",
+          "layout": {
+            "column": 9,
+            "row": 4,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT max(k8s.container.restartCount)-min(k8s.container.restartCount) as 'Restarts' FACET k8s.clusterName, k8s.podName, k8s.containerName UNTIL 1 minute ago TIMESERIES limit 50"
+              }
+            ]
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteVolume"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "ec2:ResourceTag/kubernetes.io/cluster/*": "owned"
-                }
-            }
+          "title": "Container CPU Usage - % Used vs Limit",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT latest(k8s.container.cpuUsedCores)/latest(k8s.container.cpuLimitCores) * 100 as '% CPU' FACET k8s.clusterName, k8s.podName, k8s.containerName UNTIL 1 minute ago TIMESERIES limit 50"
+              }
+            ]
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteSnapshot"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "ec2:ResourceTag/CSIVolumeSnapshotName": "*"
-                }
-            }
+          "title": "Container Memory Usage - % Used vs Limit",
+          "layout": {
+            "column": 5,
+            "row": 7,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT latest(k8s.container.memoryWorkingSetUtilization) as '% Memory' FACET k8s.clusterName, k8s.podName, k8s.containerName UNTIL 1 minute ago TIMESERIES limit 50"
+              }
+            ]
+          }
         },
         {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteSnapshot"
+          "title": "Volume Usage - % Used",
+          "layout": {
+            "column": 9,
+            "row": 7,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select latest(k8s.volume.fsUsedPercent) facet k8s.podName, k8s.volumeName, k8s.pvcName timeseries"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Container CPU Cores Used",
+          "layout": {
+            "column": 1,
+            "row": 10,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT average(k8s.container.cpuUsedCores) as 'CPU Cores Used' FROM Metric FACET k8s.clusterName, k8s.podName, k8s.containerName timeseries since 60 minutes ago UNTIL 1 minute ago limit 50"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Container MBytes of Memory Used",
+          "layout": {
+            "column": 5,
+            "row": 10,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT average(k8s.container.memoryWorkingSetBytes / 1000000) as 'MB of Mem' FROM Metric FACET k8s.clusterName, k8s.podName, k8s.containerName timeseries since 60 minutes ago UNTIL 1 minute ago limit 50"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Missing Pods by Deployment",
+          "layout": {
+            "column": 9,
+            "row": 10,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT latest(k8s.replicaset.podsDesired) - latest(k8s.replicaset.podsReady) as 'Missing Pods' FROM Metric since 10 minutes ago UNTIL 1 minute ago facet k8s.clusterName, k8s.deploymentName timeseries limit 50"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Latest pods not Running by Cluster/Namespace",
+          "layout": {
+            "column": 1,
+            "row": 13,
+            "width": 8,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT filter (latest(k8s.status),WHERE k8s.status !='Running' AND k8s.status !='Succeeded' AND k8s.status IS NOT NULL AND k8s.podName IS NOT NULL) as 'Status', max(timestamp) as 'Timestamp' FROM Metric FACET k8s.clusterName AS 'Cluster Name', k8s.namespaceName AS 'Namespace', k8s.podName AS 'Pod Name'  limit 100 "
+              }
+            ]
+          }
+        },
+        {
+          "title": "Containers by Namespace",
+          "layout": {
+            "column": 9,
+            "row": 13,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT uniqueCount(k8s.containerId) FROM Metric where metricName = 'k8s.container.restartCount' facet k8s.namespaceName TIMESERIES"
+              }
             ],
-            "Resource": "*",
-            "Condition": {
-                "StringLike": {
-                    "ec2:ResourceTag/ebs.csi.aws.com/cluster": "true"
-                }
+            "yAxisLeft": {
+              "zero": true
             }
+          }
+        },
+        {
+          "title": "Node Resource Consumption",
+          "layout": {
+            "column": 1,
+            "row": 16,
+            "width": 8,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT latest(k8s.node.cpuUsedCores) as 'Used Cores', latest(k8s.node.memoryWorkingSetBytes) / 1000000 as 'Used Memory MB', uniqueCount(k8s.podName) as 'Pods' FACET k8s.nodeName since 10 minutes ago UNTIL 1 minute ago limit 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Active Pods by Deployment",
+          "layout": {
+            "column": 9,
+            "row": 16,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT uniqueCount(k8s.podName) FROM Metric where k8s.status='Running' SINCE 10 minutes AGO UNTIL 1 minute ago facet k8s.clusterName, k8s.deploymentName WHERE k8s.deploymentName IS NOT NULL TIMESERIES limit 50"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Volumes Usage > 90%",
+          "layout": {
+            "column": 1,
+            "row": 19,
+            "width": 8,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select latest('k8s.volume.fsUsedPercent') facet k8s.podName, k8s.volumeName, k8s.pvcName where k8s.volume.fsUsedPercent > 90 SINCE 10 minutes ago UNTIL 1 minute ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pod Count by Node",
+          "layout": {
+            "column": 9,
+            "row": 19,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT uniquecount(k8s.podName) FROM Metric where status='Running' facet k8s.nodeName since 10 minutes ago UNTIL 1 minute ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pod Network Status",
+          "layout": {
+            "column": 1,
+            "row": 22,
+            "width": 12,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT latest(`k8s.pod.netRxBytesPerSecond`)/1000 as 'Received KBps', latest(`k8s.pod.netTxBytesPerSecond`)/1000 as 'Transmitted KBps', latest(`k8s.pod.netErrorsPerSecond`) as 'Errors / sec' FROM Metric FACET k8s.podName since 10 minutes ago UNTIL 1 minute ago limit 100"
+              }
+            ]
+          }
         }
-    ]
-}
-EOF
-}
-
-
-################################################################################
-# EKS Module
-################################################################################
-
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 19.0"
-  cluster_version = var.cluster_version
-  cluster_name                         = var.cluster_name
-  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
-  cluster_endpoint_public_access       = true
-
-  cluster_addons = {
-    coredns = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      most_recent = true
-    }
-    aws-ebs-csi-driver = {
-      most_recent = true 
-      service_account_role_arn = "arn:aws:iam::${var.account}:role/${var.ebs_role_name}"
-    }
-
-  }
-
-  # EKS encryption key
-  create_kms_key = false
-  cluster_encryption_config = {
-    resources        = ["secrets"]
-    provider_key_arn = module.kms.key_arn
-  }
-
-  vpc_id                   = module.vpc.vpc_id
-  subnet_ids               = module.vpc.private_subnets
-
-
-#Cluster security groups
-
-  # Cluster security group rules
-  cluster_security_group_additional_rules = {
-    ingress_nodes_ephemeral_ports_tcp = {
-      description                = "Nodes on ephemeral ports"
-      protocol                   = "tcp"
-      from_port                  = 1025
-      to_port                    = 65535
-      type                       = "ingress"
-      source_node_security_group = true
-    }
-  }
-
-  # node-to-node security group rules
-  node_security_group_additional_rules = {
-    ingress_self_all = {
-      description = "Node to node all ports/protocols"
-      protocol    = "-1"
-      from_port   = 0
-      to_port     = 0
-      type        = "ingress"
-      self        = true
-    }
-  }
-
-  
-  # EKS Managed Node Group(s)
-  
-  eks_managed_node_groups = {
-    node-1 = {
-      min_size         = var.min_size1
-      max_size         = var.max_size1
-      desired_size     = var.desired_size1
-      node_group_name  = var.NodeGroup1_name
-      instance_types   = var.instance_types1
-      capacity_type    = var.capacity_type1
-      use_custom_launch_template = false
-      disk_size        = 120
-      labels = {
-        managed_by     = "terraform"
-        cluster        = var.cluster_name
-        environment    = var.environment
-        account        = var.account
-      }
-
-      taints = var.taints_node_group_1
-
-      update_config = {
-        max_unavailable_percentage = 33 # or set `max_unavailable`
-      }
-
-    }
-    node-2 = {
-      min_size         = var.min_size2
-      max_size         = var.max_size2
-      desired_size     = var.desired_size2
-      node_group_name  = var.NodeGroup2_name
-      instance_types   = var.instance_types2
-      capacity_type    = var.capacity_type2
-      
-      labels = {
-        managed_by     = "terraform"
-        cluster        = var.cluster_name
-        environment    = var.environment
-        account        = var.account
-      }
-
-      taints = var.taints_node_group_2
-      update_config = {
-        max_unavailable_percentage = 33 # or set `max_unavailable`
-      }
-    }
-  }
-    
-  
-   # OIDC Identity provider
-   cluster_identity_providers = {
-     sts = {
-       client_id = "sts.amazonaws.com"
-     }
-   }
-
-
-  # aws-auth configmap
-  manage_aws_auth_configmap = true
-
-  aws_auth_roles = [
-    {
-      rolearn  = "arn:aws:iam::${var.account}:role/semi-admin"
-      username = "semi-admin"
-      groups   = ["system:masters"]
+      ]
     },
     {
-      rolearn  = "arn:aws:iam::${var.account}:role/OrganizationAccountAccessRole"
-      username = "OrganizationAccountAccessRole"
-      groups   = ["system:masters"]
-    },
-    {
-      rolearn  = "arn:aws:iam::${var.account}:role/dev.eks-access.role"
-      username = "dev.eks-access.role"
-      groups   = ["system:masters"]
-    },
-    {
-      rolearn  = "arn:aws:iam::${var.account}:role/code-deploy-role"
-      username = "code-deploy-role"
-      groups   = ["system:masters"]
-    },
-  ]
-
-  aws_auth_users = [
-    {
-      userarn  = "arn:aws:iam::${var.account}:user/code-deploy-user"
-      username = "code-deploy-user"
-      groups   = ["system:masters"]
-    },
-    {
-      userarn  = "arn:aws:iam::${var.account}:user/terraform"
-      username = "terraform"
-      groups   = ["system:masters"]
-    }, 
-  ]
-
-  aws_auth_accounts = [
-    var.account,
-  ]
-
-  tags = local.tags
-}
-################################################################################
-# VPC
-################################################################################
-
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 3.0"
-  name = "${var.cluster_name}-vpc"
-  cidr = var.vpc_cidr
-  azs             = local.azs
-  private_subnets = [for k, v in local.azs : cidrsubnet(var.vpc_cidr, 4, k)]
-  public_subnets  = [for k, v in local.azs : cidrsubnet(var.vpc_cidr, 8, k + 48)]
-
-  enable_nat_gateway   = true
-  single_nat_gateway   = false
-  enable_dns_hostnames = true
-
-  enable_flow_log                      = true
-  create_flow_log_cloudwatch_iam_role  = true
-  create_flow_log_cloudwatch_log_group = true
-
-  public_subnet_tags = {
-    "kubernetes.io/role/elb" = 1
-  }
-
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = 1
-  }
-
-  tags = local.tags
-}
-
-################################################################################
-# KMS
-################################################################################
-
-module "kms" {
-  source  = "terraform-aws-modules/kms/aws"
-  version = "1.1.0"
-
-  aliases               = ["eks/${var.cluster_name}"]
-  description           = "${var.cluster_name} cluster encryption key"
-  enable_default_policy = true
-  key_owners            = ["arn:aws:iam::${var.account}:user/terraform"]
-
-  tags = local.tags
-} 
-data "aws_eks_cluster" "eks_cluster" {
-  name = var.cluster_name
-  depends_on  = [module.eks]
-}
-data "aws_iam_policy" "iam" {
-  name = var.lb_policy_name
-  depends_on  = [module.iam_policy]
-  }
-
-module "iam_assumable_role_with_oidc"  {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  create_role = true
-  role_name = var.lb_role_name
-  tags = {
-    Role = var.lb_role_name
-  }
-
-  provider_url = data.aws_eks_cluster.eks_cluster.identity[0].oidc[0].issuer
-  role_policy_arns = [ data.aws_iam_policy.iam.arn,
-  ]
-  number_of_role_policy_arns = 1
-  depends_on              = [module.iam_policy]
-}
-
-
-module "iam_policy"  {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-policy"
-  name        = var.lb_policy_name
-  path        = "/"
-  description = "LoadBalancer Controller Policy for EKS Cluster"
-  depends_on              = [module.eks]
-  policy = <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
+      "name": "Kubernetes Clusters and Nodes",
+      "description": null,
+      "widgets": [
         {
-            "Sid": "VisualEditor0",
-            "Effect": "Allow",
-            "Action": "ec2:CreateTags",
-            "Resource": "arn:aws:ec2:*:*:security-group/*",
-            "Condition": {
-                "StringEquals": {
-                    "ec2:CreateAction": "CreateSecurityGroup"
-                },
-                "Null": {
-                    "aws:RequestTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 1,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "![Kubernetes](https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Kubernetes_logo_without_workmark.svg/1200px-Kubernetes_logo_without_workmark.svg.png)"
+          }
         },
         {
-            "Sid": "VisualEditor1",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DeleteTags",
-                "ec2:CreateTags"
-            ],
-            "Resource": "arn:aws:ec2:*:*:security-group/*",
-            "Condition": {
-                "Null": {
-                    "aws:RequestTag/elbv2.k8s.aws/cluster": "true",
-                    "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor2",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:RevokeSecurityGroupIngress",
-                "ec2:AuthorizeSecurityGroupIngress",
-                "ec2:DeleteSecurityGroup"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "Null": {
-                    "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor3",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:AuthorizeSecurityGroupIngress",
-                "elasticloadbalancing:ModifyListener",
-                "wafv2:AssociateWebACL",
-                "ec2:DescribeInstances",
-                "wafv2:GetWebACLForResource",
-                "iam:ListServerCertificates",
-                "ec2:DescribeCoipPools",
-                "wafv2:GetWebACL",
-                "ec2:DescribeInternetGateways",
-                "elasticloadbalancing:SetWebAcl",
-                "elasticloadbalancing:DescribeLoadBalancers",
-                "waf-regional:GetWebACLForResource",
-                "waf-regional:GetWebACL",
-                "elasticloadbalancing:CreateRule",
-                "ec2:DescribeAccountAttributes",
-                "elasticloadbalancing:AddListenerCertificates",
-                "iam:GetServerCertificate",
-                "wafv2:DisassociateWebACL",
-                "ec2:DescribeVpcPeeringConnections",
-                "shield:GetSubscriptionState",
-                "ec2:RevokeSecurityGroupIngress",
-                "elasticloadbalancing:DescribeLoadBalancerAttributes",
-                "acm:DescribeCertificate",
-                "elasticloadbalancing:DescribeTargetGroupAttributes",
-                "shield:CreateProtection",
-                "elasticloadbalancing:ModifyRule",
-                "elasticloadbalancing:DescribeRules",
-                "ec2:DescribeSubnets",
-                "waf-regional:AssociateWebACL",
-                "ec2:DescribeAddresses",
-                "shield:DescribeProtection",
-                "shield:DeleteProtection",
-                "elasticloadbalancing:RemoveListenerCertificates",
-                "elasticloadbalancing:CreateListener",
-                "ec2:DescribeNetworkInterfaces",
-                "elasticloadbalancing:DescribeListeners",
-                "ec2:DescribeAvailabilityZones",
-                "ec2:CreateSecurityGroup",
-                "acm:ListCertificates",
-                "elasticloadbalancing:DescribeListenerCertificates",
-                "elasticloadbalancing:DeleteRule",
-                "cognito-idp:DescribeUserPoolClient",
-                "elasticloadbalancing:DescribeSSLPolicies",
-                "waf-regional:DisassociateWebACL",
-                "ec2:DescribeTags",
-                "ec2:GetCoipPoolUsage",
-                "elasticloadbalancing:DescribeTags",
-                "ec2:DescribeSecurityGroups",
-                "ec2:DescribeVpcs",
-                "elasticloadbalancing:DescribeTargetHealth",
-                "elasticloadbalancing:DescribeTargetGroups",
-                "elasticloadbalancing:DeleteListener"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "VisualEditor4",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:CreateLoadBalancer",
-                "elasticloadbalancing:CreateTargetGroup"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "Null": {
-                    "aws:RequestTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor5",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:CreateLoadBalancer",
-                "elasticloadbalancing:CreateTargetGroup"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "Null": {
-                    "aws:RequestTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor6",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:RemoveTags",
-                "elasticloadbalancing:AddTags"
-            ],
-            "Resource": [
-                "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*",
-                "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*",
-                "arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*"
-            ],
-            "Condition": {
-                "Null": {
-                    "aws:RequestTag/elbv2.k8s.aws/cluster": "true",
-                    "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor7",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:RemoveTags",
-                "elasticloadbalancing:AddTags"
-            ],
-            "Resource": [
-                "arn:aws:elasticloadbalancing:*:*:loadbalancer/net/*/*",
-                "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/*/*",
-                "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
-            ],
-            "Condition": {
-                "Null": {
-                    "aws:RequestTag/elbv2.k8s.aws/cluster": "true",
-                    "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor8",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:DeleteLoadBalancer",
-                "elasticloadbalancing:SetSecurityGroups",
-                "elasticloadbalancing:SetIpAddressType",
-                "elasticloadbalancing:SetSubnets",
-                "elasticloadbalancing:ModifyLoadBalancerAttributes",
-                "elasticloadbalancing:DeleteTargetGroup",
-                "elasticloadbalancing:ModifyTargetGroupAttributes",
-                "elasticloadbalancing:ModifyTargetGroup"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "Null": {
-                    "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor9",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:DeleteLoadBalancer",
-                "elasticloadbalancing:SetSecurityGroups",
-                "elasticloadbalancing:SetIpAddressType",
-                "elasticloadbalancing:SetSubnets",
-                "elasticloadbalancing:ModifyLoadBalancerAttributes",
-                "elasticloadbalancing:DeleteTargetGroup",
-                "elasticloadbalancing:ModifyTargetGroupAttributes",
-                "elasticloadbalancing:ModifyTargetGroup"
-            ],
-            "Resource": "*",
-            "Condition": {
-                "Null": {
-                    "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor10",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:RemoveTags",
-                "elasticloadbalancing:AddTags"
-            ],
-            "Resource": [
-                "arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*"
+          "title": "Clusters",
+          "layout": {
+            "column": 2,
+            "row": 1,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select uniqueCount(k8s.nodeName) as 'Nodes', filter(uniqueCount(k8s.podName), where k8s.status = 'Running') as 'Running Pods', filter(uniqueCount(k8s.podName), where k8s.status in ('Pending')) as 'Pending Pods', uniqueCount(k8s.podName) as 'Total Pods' facet k8s.clusterName since 30 minutes ago limit 1000"
+              }
             ]
+          }
         },
         {
-            "Sid": "VisualEditor11",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:RemoveTags",
-                "elasticloadbalancing:AddTags"
-            ],
-            "Resource": [
-                "arn:aws:elasticloadbalancing:*:*:listener/net/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener/app/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener-rule/net/*/*/*",
-                "arn:aws:elasticloadbalancing:*:*:listener-rule/app/*/*/*"
+          "title": "CPU Usage",
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "width": 2,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT average(k8s.node.cpuUsedCores) / average(k8s.node.allocatableCpuCores) * 100 AS 'CPU Util %', 100 as '100' since 30 minutes ago TIMESERIES"
+              }
             ]
+          }
         },
         {
-            "Sid": "VisualEditor12",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:RegisterTargets",
-                "elasticloadbalancing:DeregisterTargets"
+          "title": "Memory Usage",
+          "layout": {
+            "column": 9,
+            "row": 1,
+            "width": 2,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT average(k8s.node.memoryWorkingSetBytes) / average(k8s.node.allocatableMemoryBytes) * 100 AS 'Memory Util %', 100 as '100' since 30 minutes ago TIMESERIES"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Disk Usage",
+          "layout": {
+            "column": 11,
+            "row": 1,
+            "width": 2,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT average(k8s.node.fsUsedBytes) / average(k8s.node.fsCapacityBytes) * 100 AS 'Disk Util %', 100 as '100' FROM Metric since 30 minutes ago TIMESERIES"
+              }
+            ]
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "width": 1,
+            "height": 1
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT filter(uniqueCount(k8s.nodeName), WHERE `label.eks.amazonaws.com/compute-type` IS NULL AND k8s.podName IS NULL) as 'Nodes' since 30 minutes ago"
+              }
             ],
-            "Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+            "thresholds": []
+          }
         },
         {
-            "Sid": "VisualEditor13",
-            "Effect": "Allow",
-            "Action": "iam:CreateServiceLinkedRole",
-            "Resource": "*",
-            "Condition": {
-                "StringEquals": {
-                    "iam:AWSServiceName": "elasticloadbalancing.amazonaws.com"
-                }
-            }
-        },
-        {
-            "Sid": "VisualEditor14",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:RegisterTargets",
-                "elasticloadbalancing:DeregisterTargets"
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "width": 1,
+            "height": 1
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT filter(uniqueCount(k8s.nodeName), WHERE `label.eks.amazonaws.com/compute-type` IS NOT NULL AND k8s.podName IS NULL) as 'Serverless Nodes'"
+              }
             ],
-            "Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+            "thresholds": []
+          }
+        },
+        {
+          "title": "Nodes",
+          "layout": {
+            "column": 2,
+            "row": 4,
+            "width": 11,
+            "height": 5
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select filter(uniqueCount(k8s.podName), where  k8s.status = 'Running') as 'Running Pods', filter(uniqueCount(k8s.podName), where k8s.status = 'Pending') as 'Pending Pods', (average(k8s.node.cpuUsedCores) / average(k8s.node.allocatableCpuCores) * 100) as 'CPU %', (average(k8s.node.memoryWorkingSetBytes) / average(k8s.node.allocatableMemoryBytes) * 100) as 'Mem %', (average(k8s.node.fsUsedBytes) / average(k8s.node.fsCapacityBytes) * 100) as 'Disk Util %' where nodeName is not null facet nodeName limit 2000 since 30 minutes ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "width": 1,
+            "height": 1
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select uniqueCount(k8s.podName) as 'Running Pods' where k8s.status = 'Running' since 30 minutes ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "width": 1,
+            "height": 1
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select filter(uniqueCount(k8s.podName), where k8s.status = 'Running') / filter(uniqueCount(k8s.podName), where k8s.status in ('Running','Pending')) * 100 as '% Pods Running' since 30 minutes ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "width": 1,
+            "height": 1
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric SELECT filter(uniqueCount(k8s.namespaceName, k8s.clusterName), WHERE `metricName` = 'k8s.namespace.createdAt') as 'Namespaces' since 30 minutes ago"
+              }
+            ],
+            "thresholds": []
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "width": 1,
+            "height": 1
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select filter(uniqueCount(k8s.deploymentName, k8s.clusterName), WHERE `metricName` = 'k8s.deployment.createdAt') as 'Deployments' since 30 minutes ago"
+              }
+            ],
+            "thresholds": []
+          }
         }
-    ]
-}
-EOF
-}
-
-terraform {
-  backend "s3" {
-    skip_credentials_validation = true
-    skip_metadata_api_check     = true
-    region                      = "us-east-2"
-    bucket                      = "ops-terraform-state-dev-001"
-    key                         = "tfstate/terraform-eks-rc.tfstate"
-  }
-}
-
-
-provider "aws" {
-  region = var.region
-}
-
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    # This requires the awscli to be installed locally where Terraform is executed
-    args = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-  }
-}
-
-data "aws_availability_zones" "available" {}
-data "aws_caller_identity" "current" {}
-
-
-locals {
-    azs      = slice(data.aws_availability_zones.available.names, 0, 3)
-    tags = {
-    managed_by    = "terraform"
-    cluster       = var.cluster_name
-    environment   = var.environment
-    owner         = var.owner
-    account       = var.account
-  }
-}
-
-################################################################################
-# Cluster Output
-################################################################################
-output "cluster_name" {
-  description = "The name of the EKS cluster"
-  value       = module.eks.cluster_name
-}
-
-
-output "cluster_arn" {
-  description = "The Amazon Resource Name (ARN) of the cluster"
-  value       = module.eks.cluster_arn
-}
-
-
-output "cluster_id" {
-  description = "The ID of the EKS cluster. Note: currently a value is returned only for local EKS clusters created on Outposts"
-  value       = module.eks.cluster_id
-}
-
-
-output "cluster_oidc_issuer_url" {
-  description = "The URL on the EKS cluster for the OpenID Connect identity provider"
-  value       = module.eks.cluster_oidc_issuer_url
-}
-
-
-output "cluster_status" {
-  description = "Status of the EKS cluster. One of `CREATING`, `ACTIVE`, `DELETING`, `FAILED`"
-  value       = module.eks.cluster_status
-}
-
-output "security-group-internal" {
-  description = "Id of the security group used for internal access through HTTP and HTTPS"
-  value       = module.internal_access.security_group_id
-}
-
-module "internal_access" {
-  source = "terraform-aws-modules/security-group/aws"
-
-  name   = "internal_access_eks_alb"
-  vpc_id = module.vpc.vpc_id
-
-  depends_on = [
-    module.vpc
-  ]
-
-  ingress_with_cidr_blocks = [
-    {
-      from_port   = 80
-      to_port     = 80
-      protocol    = "tcp"
-      description = "VPN Israel"
-      cidr_blocks = "212.59.70.12/32"
+      ]
     },
     {
-      from_port   = 80
-      to_port     = 80
-      protocol    = "tcp"
-      description = "VPN Securitize"
-      cidr_blocks = "64.226.129.79/32"
+      "name": "Kubernetes Container Restarts",
+      "description": null,
+      "widgets": [
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 3,
+            "height": 7
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "# Container Restarts\n---\n![Container](https://github.com/kubernetes/community/blob/master/icons/png/resources/unlabeled/pod-128.png?raw=true)\n\nContainer restarts are **usually** not a good thing.  This dashboard will help identify the biggest offenders and where they are currently _trying_ to run."
+          }
+        },
+        {
+          "title": "Container Restarts",
+          "layout": {
+            "column": 4,
+            "row": 1,
+            "width": 9,
+            "height": 7
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select max(k8s.container.restartCount) AS 'Restart Count', latest(k8s.reason) AS 'Last Restart Reason' where k8s.container.restartCount[latest] > 0 AND k8s.reason IS NOT NULL order by k8s.container.restartCount facet k8s.containerName AS 'Container Name', k8s.podName AS 'Pod Name', k8s.clusterName AS 'Cluster Name' since 30 minutes ago limit 1000"
+              }
+            ]
+          }
+        }
+      ]
     },
     {
-      from_port   = 80
-      to_port     = 80
-      protocol    = "tcp"
-      description = "VPN Securitize"
-      cidr_blocks = "167.179.64.35/32"
+      "name": "Kubernetes Pod Status",
+      "description": null,
+      "widgets": [
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 1,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "![Pod](https://github.com/kubernetes/community/blob/master/icons/png/resources/labeled/pod-128.png?raw=true)"
+          }
+        },
+        {
+          "title": "Overall Pod Status",
+          "layout": {
+            "column": 2,
+            "row": 1,
+            "width": 11,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select uniqueCount(k8s.podName) as 'Total Pods', filter(uniqueCount(k8s.podName), where k8s.status = 'Running') as 'Running Pods', filter(uniqueCount(k8s.podName), where k8s.status = 'Pending') as 'Pending Pods', filter(uniqueCount(k8s.podName), where k8s.status = 'Failed') as 'Failed Pods' since 30 minutes ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pod Status by Cluster",
+          "layout": {
+            "column": 1,
+            "row": 3,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select uniqueCount(k8s.podName) as 'Pod Count' where k8s.status is not null facet k8s.clusterName AS 'Cluster Name', k8s.status AS 'Status' since 30 minutes ago limit 100"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Latest Pending Pods",
+          "layout": {
+            "column": 6,
+            "row": 3,
+            "width": 7,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select k8s.podName AS 'Pod Name', k8s.status AS 'Status' , k8s.clusterName AS 'Cluster Name' where k8s.status = 'Pending' since 30 minutes ago limit 1000"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pod OOMKills",
+          "layout": {
+            "column": 1,
+            "row": 6,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT count(k8s.reason) as 'OOM Kills' FROM Metric WHERE k8s.reason = 'OOMKilled' facet k8s.clusterName, k8s.podName since 30 minutes ago limit 1000"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Latest Failed Pods",
+          "layout": {
+            "column": 6,
+            "row": 6,
+            "width": 7,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM Metric select k8s.podName AS 'Pod Name', k8s.status AS 'Status', k8s.clusterName AS 'Cluster Name' where k8s.status = 'Failed' since 30 minutes ago limit 1000"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pods Restarts",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "width": 12,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.bar"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT max(k8s.container.restartCount) - min(k8s.container.restartCount) FROM Metric FACET k8s.podName, k8s.namespaceName"
+              }
+            ]
+          }
+        }
+      ]
     },
     {
-      from_port   = 80
-      to_port     = 80
-      protocol    = "tcp"
-      description = "QA jenkins"
-      cidr_blocks = "3.21.174.147/32"
+      "name": "Kubernetes Utilization",
+      "description": null,
+      "widgets": [
+        {
+          "title": "CPU Used (Cores) by Node",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 12,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.area"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT average(k8s.node.cpuUsedCores) FROM Metric FACET k8s.nodeName SINCE 60 MINUTES AGO TIMESERIES"
+              }
+            ]
+          }
+        },
+        {
+          "title": "CPU % by Instance Type",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "width": 8,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.heatmap"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT histogram(host.process.cpuPercent, 100, 25) FROM Metric FACET host.instanceType"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Memory Usage by pod, container",
+          "layout": {
+            "column": 9,
+            "row": 4,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT (average(k8s.container.memoryUsedBytes) / average(k8s.container.memoryLimitBytes))*100 as 'Memory Used %' FROM Metric facet k8s.podName, k8s.containerName timeseries since 60 minutes ago LIMIT 1000"
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "CPU % by Namespace",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "width": 8,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.heatmap"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT histogram(host.process.cpuPercent, 10, 100) FROM Metric FACET `containerLabel_io.kubernetes.pod.namespace`"
+              }
+            ]
+          }
+        },
+        {
+          "title": "MAX CPU Cores Requested by Container",
+          "layout": {
+            "column": 9,
+            "row": 7,
+            "width": 4,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT max(k8s.container.cpuRequestedCores) FROM Metric FACET k8s.containerName SINCE 30 MINUTES AGO TIMESERIES"
+              }
+            ]
+          }
+        }
+      ]
     },
     {
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      description = "VPN Israel"
-      cidr_blocks = "212.59.70.12/32"
+      "name": "Kubernetes Cluster Events",
+      "description": null,
+      "widgets": [
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 1,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "![Logo](https://constructionlinks.ca/wp-content/uploads/2020/07/procore-logo-2020.jpg)"
+          }
+        },
+        {
+          "title": "Event Breakdown",
+          "layout": {
+            "column": 2,
+            "row": 1,
+            "width": 7,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.pie"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent select max(event.count) as 'Event Count' where category = 'kubernetes' and event.reason like '%Fail%' or event.reason like '%Kill%' or event.reason like '%Evict%' or event.reason like '%BackOff%' facet event.reason limit 1000 since 1 day ago"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Murders",
+          "layout": {
+            "column": 9,
+            "row": 1,
+            "width": 2,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent SELECT count(event.count) as 'Murders' WHERE category = 'kubernetes' AND event.reason like '%Kill%'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Backoffs",
+          "layout": {
+            "column": 11,
+            "row": 1,
+            "width": 2,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent SELECT count(event.count) as 'Backoffs' WHERE category = 'kubernetes' AND event.reason like '%BackOff%'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Evictions",
+          "layout": {
+            "column": 9,
+            "row": 3,
+            "width": 2,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent select count(event.count) as 'Evictions' where category = 'kubernetes' AND event.reason like '%Evicted%' "
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pod Failures",
+          "layout": {
+            "column": 11,
+            "row": 3,
+            "width": 2,
+            "height": 2
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent select count(event.count) as 'Pod Fails' where category = 'kubernetes' AND event.reason like '%Fail%' "
+              }
+            ],
+            "thresholds": [
+              {
+                "alertSeverity": "CRITICAL",
+                "value": 0
+              },
+              {
+                "alertSeverity": "WARNING",
+                "value": 0
+              }
+            ]
+          }
+        },
+        {
+          "title": "Cluster Events",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "width": 6,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent select max(event.count) as 'Event Count', latest(event.lastTimestamp), latest(entityName) where category = 'kubernetes' and event.reason like '%Fail%' or event.reason like '%Kill%' or event.reason like '%Evict%' or event.reason like '%BackOff%' facet event.reason, clusterName, event.involvedObject.name, event.involvedObject.kind  limit 1000 since 1 day ago where clusterName = 'pixie-auto-telemetry'"
+              }
+            ]
+          }
+        },
+        {
+          "title": "Timeseries of Kubernetes Cluster Events",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "width": 6,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "FROM InfrastructureEvent select count(event.count) as 'Event Count' where category = 'kubernetes' and event.reason like '%Fail%' or event.reason like '%Kill%' or event.reason like '%Evict%' or event.reason like '%BackOff%' facet event.reason limit 1000 since 1 day ago TIMESERIES AUTO "
+              }
+            ],
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        }
+      ]
     },
     {
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      description = "VPN Securitize"
-      cidr_blocks = "64.226.129.79/32"
+      "name": "Optimization View",
+      "description": null,
+      "widgets": [
+        {
+          "title": "Current Resource Configuration",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 2,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT latest(cpuRequestedCores) AS 'CPU request', \nlatest(cpuLimitCores) AS 'CPU limit', \nlatest(memoryRequestedBytes/1024/1024) AS 'Memory request (MB)', \nlatest(memoryLimitBytes/1024/1024) AS 'Memory limit (MB)' \nFROM K8sContainerSample SINCE 1 week ago"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        },
+        {
+          "title": "Suggested Resource Configuration",
+          "layout": {
+            "column": 3,
+            "row": 1,
+            "width": 2,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT percentile(cpuUsedCores, 95) * (1 + 50/100) AS 'CPU request', \npercentile(cpuUsedCores, 95) * (1 + 100/100) AS 'CPU limit', \npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 50/100) AS 'Memory request (MB)', \npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 100/100) AS 'Memory limit (MB)' \nFROM K8sContainerSample SINCE 1 week ago"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        },
+        {
+          "title": "Potential Resource Savings per Replica",
+          "layout": {
+            "column": 5,
+            "row": 1,
+            "width": 2,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT latest(cpuRequestedCores) - (percentile(cpuUsedCores, 95) * (1 + 50/100)) AS 'CPU request', \nlatest(cpuLimitCores) - (percentile(cpuUsedCores, 95) * (1 + 100/100)) AS 'CPU limit', \nlatest(memoryRequestedBytes/1024/1024) - (percentile(memoryUsedBytes/1024/1024, 95) * (1 + 50/100)) AS 'Memory request (MB)', \nlatest(memoryLimitBytes/1024/1024) - (percentile(memoryUsedBytes/1024/1024, 95) * (1 + 100/100)) AS 'Memory limit (MB)' \nFROM K8sContainerSample SINCE 1 week ago"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "thresholds": [
+              {
+                "alertSeverity": "CRITICAL",
+                "value": -50000
+              },
+              {
+                "alertSeverity": "WARNING",
+                "value": -0.01
+              }
+            ]
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 7,
+            "row": 1,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "# About This Page\n **Use the suggested recommendations to highly POTENTIAL optimizations, and test well before shipping to any production environments.  Always make sure you use filters to narrow down the set of data so that the recommendations are sensible.  For example filter by such attributes as cluster, deployment, and namesspace.**\n\n  ## How to Use These Recommendations\n\n  There are several specific variables in your K8s configurations that can be adjusted based on what you see in this report.\n  \n * [Requests & Limits](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#requests-and-limits)\n  * [Memory](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-memory)\n  * [CPU](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu)\n   * [ResourceQuota](https://kubernetes.io/docs/concepts/policy/resource-quotas/)\n  * [LimitRange](https://kubernetes.io/docs/concepts/policy/limit-range/)\n  \n **The mechanics behind k8s resources are explained here:** https://blog.kubecost.com/blog/requests-and-limits/\n\n ## Acknowledgement\n\nAt Futurestack 2022 we showed how to use this data to potentially optimize both memory and CPU configures. Please utilize the dashboard filtering capabilities to filter to a specfic cluster, namespace, or container.\n\n## See the Futurestack presentation by [Frank Dornberger](https://newrelic.com/blog/authors/frank-dornberger) [here](https://www.youtube.com/watch?v=yiv1hnfekl4) and Frank's blog post [here](https://newrelic.com/blog/how-to-relic/movingimage-kubernetes-containers)\n## The demonstration environment from the workshop can be found in [Github](https://github.com/frank-dornberger/futurestack-2022-workshop)."
+          }
+        },
+        {
+          "title": "High CPU Throttle Count (indicator of over-utilization)",
+          "layout": {
+            "column": 1,
+            "row": 4,
+            "width": 3,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT sum(containerCpuCfsThrottledPeriodsDelta) FROM K8sContainerSample SINCE 1 week ago FACET containerName TIMESERIES MAX"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "High OOM Killed Count (indicator of over-utilization)",
+          "layout": {
+            "column": 4,
+            "row": 4,
+            "width": 3,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT count(*) FROM K8sContainerSample WHERE reason = 'OOMKilled' SINCE 1 week ago FACET containerName TIMESERIES MAX"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "yAxisLeft": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "",
+          "layout": {
+            "column": 7,
+            "row": 4,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "## Over-Utilization Indicators\n\nIn some environments we may be over-utilizing key resources.  In those scenarios optimization is contra-indicated.\n\nCPU Thottling and OOM Kills are good indicators of potential overutilization of CPU and Memory resources.\n\n[Assigning CPU Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/)\n\n[Assigning Memory Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-memory-resource/)"
+          }
+        },
+        {
+          "title": "Suggestion Report",
+          "layout": {
+            "column": 1,
+            "row": 7,
+            "width": 11,
+            "height": 9
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountId": 2941593,
+                "query": "SELECT latest(cpuRequestedCores) AS 'current CPU request', \nlatest(cpuLimitCores) AS 'current CPU limit', latest(memoryRequestedBytes/1024/1024) AS 'current Memory request (MB)', latest(memoryLimitBytes/1024/1024) AS 'current Memory limit (MB)', percentile(cpuUsedCores, 95) * (1 + 50/100) AS 'suggested CPU request', \n\npercentile(cpuUsedCores, 95) * (1 + 100/100) AS 'suggested CPU limit', \naverage(containerCpuCfsThrottledPeriodsDelta) AS 'Avg. Throttles', \n\npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 50/100) AS 'suggested Memory request (MB)', \n\npercentile(memoryUsedBytes/1024/1024, 95) * (1 + 100/100) AS 'suggested Memory limit (MB)'\nFROM K8sContainerSample SINCE 1 month ago \nFACET namespace, containerName AS 'Container' LIMIT MAX"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        }
+      ]
     },
     {
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      description = "VPN Securitize"
-      cidr_blocks = "167.179.64.35/32"
-    },
-    {
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      description = "QA jenkins"
-      cidr_blocks = "3.21.174.147/32"
-    },
-    
-  ]
-
-  egress_cidr_blocks      = ["0.0.0.0/0"]
-}
-
-#General settings
-account     = "766597584338"
-environment = "rc"
-region      = "us-east-2"
-
-#Cluster settings
-cluster_name                   = "cluster-eks-rc"
-cluster_version                = "1.24"
-cluster_endpoint_public_access = true
-
-
-#Node 1 settings
-NodeGroup1_name = "Default"
-min_size1       = 20
-max_size1       = 35
-desired_size1   = 35
-instance_types1 = ["r5.large" ,"c4.xlarge" ,"c5.xlarge" ,"t3.large"]
-capacity_type1  = "SPOT"
-#Taints
-taints_node_group_1 = {}
-
-#Node 2 settings
-NodeGroup2_name = "jobs"
-min_size2       = 1
-max_size2       = 1
-desired_size2   = 1
-instance_types2 = ["t3.large"]
-capacity_type2  = "ON_DEMAND"
-# Taints
-taints_node_group_2 = {
-  dedicated = {
-    key            = "dedicated"
-    value          = "jobs"
-    effect         = "NO_SCHEDULE"
-  }
-}
-
-#VPC settings
-vpc_cidr                             = "10.3.0.0/16"
-cluster_endpoint_public_access_cidrs = ["3.20.109.134/32", "3.15.139.33/32", "212.59.70.12/32", "64.226.129.79/32", "212.59.70.12/32", "13.58.31.106/32", "167.179.64.35/32","18.218.79.251/32"]
-enable_nat_gateway                   = true
-single_nat_gateway                   = false
-enable_dns_hostnames                 = true
-enable_flow_log                      = true
-create_flow_log_cloudwatch_iam_role  = true
-create_flow_log_cloudwatch_log_group = true
-
-#ELB Controller 
-lb_role_name = "AmazonEKSLoadBalancerControllerRoleRC-eks"
-lb_policy_name = "AWSLoadBalancerControllerIAMPolicyRC-eks"
-lb_arn_role = "arn:aws:iam::766597584338:role/AmazonEKSLoadBalancerControllerRoleRC-eks"
-
-
-#EBS-CSI Driver
-ebs_role_name = "AmazonEKSEBS-CSI-DriverRoleRC-eks"
-ebs_policy_name = "AWSEBS-CSI-DriverIAMPolicyRC-eks"
-ebs_arn_role = "arn:aws:iam::766597584338:role/AmazonEKSEBS-CSI-DriverRoleRC-eks"
-
-variable "region" {
-  description = "AWS region"
-  type        = string
-  default     = ""
-}
-
-variable "profile" {
-  description = "AWS profile"
-  type        = string
-  default     = ""
-}
-
-variable "access_key" {
-  description = "AWS access key"
-  type        = string
-  default     = ""
-}
-
-variable "secret_key" {
-  description = "AWS secret key"
-  type        = string
-  default     = ""
-}
-
-variable "cluster_name" {
-  description = "cluster name"
-  type        = string
-  default     = ""
-}
-
-variable "cluster_endpoint_public_access" {
-  description = "cluster endpoint public access"
-  type        = bool
-  default     = "true"
-}
-
-variable "cluster_version" {
-  description = "cluster version"
-  type        = string
-  default     = ""
-}
-
-variable "NodeGroup1_name" {
-  description = "Node Group name"
-  type        = string
-  default     = ""
-}
-
-variable "min_size1" {
-  description = "node min size for nodegroup"
-  type        = string
-  default     = ""
-}
-
-variable "max_size1" {
-  description = "node max size for nodegroup"
-  type        = string
-  default     = ""
-}
-
-variable "desired_size1" {
-  type        = string
-  default     = ""
-}
-
-variable "instance_types1" {
-  type        = list(any)
-  default     = [""]
-}
-
-variable "capacity_type1" {
-  type        = string
-  default     = ""
-}
-
-variable "NodeGroup2_name" {
-  type        = string
-  default     = ""
-}
-
-variable "min_size2" {
-  type        = string
-  default     = ""
-}
-
-variable "max_size2" {
-  type        = string
-  default     = ""
-}
-
-variable "desired_size2" {
-  type        = string
-  default     = ""
-}
-
-variable "instance_types2" {
-  type        = list(any)
-  default     = [""]
-}
-
-variable "capacity_type2" {
-  type        = string
-  default     = ""
-}
-
-variable "environment" {
-  type        = string
-  default     = ""
-}
-
-variable "taints_node_group_1" {
-  type        = any
-  default     = {}
-}
-
-variable "taints_node_group_2" {
-  type        = any
-  default     = {}
-}
-
-variable "single_nat_gateway" {
-  type        = bool
-  default     = "true"
-}
-
-variable "enable_flow_log" {
-  type        = bool
-  default     = "true"
-}
-
-variable "public_access_cidrs" {
-  type        = list(any)
-  default     = [""]
-}
-
-variable "private_subnets" {
-  type        = list(any)
-  default     = [""]
-}
-
-variable "public_subnets" {
-  type        = list(any)
-  default     = [""]
-}
-
-variable "create_flow_log_cloudwatch_log_group" {
-  type        = bool
-  default     = "true"
-}
-
-variable "enable_dns_hostnames" {
-  type        = bool
-  default     = "true"
-}
-
-variable "vpc_cidr" {
-  type        = string
-  default     = ""
-}
-
-variable "enable_nat_gateway" {
-  type        = bool
-  default     = "true"
-}
-
-variable "create_flow_log_cloudwatch_iam_role" {
-  type        = bool
-  default     = "true"
-}
-
-variable "cluster_service" {
-  type        = string
-  default     = ""
-}
-
-variable "cluster_endpoint_public_access_cidrs" {
-  type        = list(any)
-  default     = [""]
-}
-
-variable "one_nat_gateway_per_az" {
-  description = "one nat gateway per az"
-  type        = bool
-  default = false
-}
-
-variable "lb_policy_name" {
-  type        = string
-  default     = ""
-}
-
-variable "lb_role_name" {
-  type        = string
-  default     = ""
-}
-
-variable "account" {
-  type        = string
-  default     = ""
-}
-
-variable "owner" {
-  type        = string
-  default     = ""
-}
-
-variable "provider_url" {
-  description = "provider_url"
-  type        = string
-  default = ""
-}
-
-variable "lb_serviceAccount_name" {
-  description = "Load Balnacer Controller Service Account"
-  type        = string
-  default = "aws-load-balancer-controller"
-}
-
-variable "lb_arn_role" {
-  description = "Load Balnacer Controller ARN Role"
-  type        = string
-  default = "aws-load-balancer-controller"
-}
-
-variable "lb_namespace" {
-  description = "Load Balnacer Controller namespace"
-  type        = string
-  default = "infra"
-}
-
-variable "ebs_policy_name" {
-  type        = string
-  default     = ""
-}
-
-variable "ebs_role_name" {
-  type        = string
-  default     = ""
-}
-
-terraform {
-  required_version = ">= 1.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 4.47"
+      "name": "Synthetic Status",
+      "description": null,
+      "widgets": [
+        {
+          "title": "STG Success Synthetics",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  2941593
+                ],
+                "query": "FROM SyntheticCheck SELECT uniqueCount(monitorId) WHERE monitorName LIKE '%stg%' AND monitorName LIKE '%kong%' AND result = 'SUCCESS' FACET monitorName"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "thresholds": [
+              {
+                "alertSeverity": "CRITICAL",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "title": "Pro-Evolution Success Synthetics",
+          "layout": {
+            "column": 6,
+            "row": 1,
+            "width": 5,
+            "height": 3
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.billboard"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  2941593
+                ],
+                "query": "FROM SyntheticCheck SELECT uniqueCount(monitorId) WHERE monitorName LIKE '%pro-evolution%' AND monitorName LIKE '%kong%' AND result = 'SUCCESS' FACET monitorName"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "thresholds": [
+              {
+                "alertSeverity": "CRITICAL",
+                "value": 1
+              }
+            ]
+          }
+        }
+      ]
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.10"
-    }
-  }
+  ],
+  "variables": []
 }
